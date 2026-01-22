@@ -1,6 +1,6 @@
 import logo from "./logo.svg";
 import "./App.css";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 function Square({ value, onSquareClick }) {
   return (
@@ -10,13 +10,15 @@ function Square({ value, onSquareClick }) {
   );
 }
 
-function Board({ xIsNext, squares, onPlay }) {
+function Board({ xIsNext, squares, onPlay, timeLeft }) {
   const winner = calculateWinner(squares);
+  const isDraw = !winner && squares.every(Boolean);
   let status;
 
   if (winner) {
     status = "Winner: " + winner;
-  } else {
+  } else if (isDraw) status = "Draw!";
+  else {
     status = "Next player: " + (xIsNext ? "X" : "O");
   }
 
@@ -44,55 +46,70 @@ function Board({ xIsNext, squares, onPlay }) {
           key={idx}
           value={squares[idx]}
           onSquareClick={() => handleClick(idx)}
-        />
+        />,
       );
     }
     rows.push(
       <div className="board-row" key={i}>
         {cols}
-      </div>
+      </div>,
     );
   }
 
   return (
     <>
-      <div className="status">{status}</div>
+      <div className="status">
+        {status}
+        {!winner && !isDraw && (
+          <span style={{ marginLeft: 12 }}>
+            Time left: <b> {timeLeft}</b>s
+          </span>
+        )}
+      </div>
       {rows}
     </>
   );
-
-  function calculateWinner(squares) {
-    const lines = [
-      [0, 1, 2],
-      [3, 4, 5],
-      [6, 7, 8],
-      [0, 3, 6],
-      [1, 4, 7],
-      [2, 5, 8],
-      [0, 4, 8],
-      [2, 4, 6],
-    ];
-
-    for (let i = 0; i < lines.length; i++) {
-      const [a, b, c] = lines[i];
-      if (
-        squares[a] &&
-        squares[a] === squares[b] &&
-        squares[a] === squares[c]
-      ) {
-        return squares[a];
-      }
-    }
-
-    return null;
-  }
 }
 
+function calculateWinner(squares) {
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const [a, b, c] = lines[i];
+    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+      return squares[a];
+    }
+  }
+
+  return null;
+}
 export default function Game() {
+  const TURN_SECONDS = 30;
   const [history, setHistory] = useState([Array(9).fill(null)]);
   const [currentMove, setCurrentMove] = useState(0);
   const currentSquares = history[currentMove];
   const xIsNext = currentMove % 2 === 0;
+
+  const winner = useMemo(
+    () => calculateWinner(currentSquares),
+    [currentSquares],
+  );
+  const isDraw = useMemo(
+    () => !winner && currentSquares.every(Boolean),
+    [winner, currentSquares],
+  );
+  const isGameOver = winner || isDraw;
+
+  const [timeLeft, setTimeLeft] = useState(TURN_SECONDS);
 
   function handlePlay(nextSquares) {
     const nextHistory = [...history.slice(0, currentMove + 1), nextSquares];
@@ -102,6 +119,26 @@ export default function Game() {
   function jumpTo(nextMove) {
     setCurrentMove(nextMove);
   }
+
+  useEffect(() => {
+    setTimeLeft(TURN_SECONDS);
+  }, [currentMove, TURN_SECONDS]);
+
+  useEffect(() => {
+    if (isGameOver) return;
+    const id = setInterval(() => {
+      setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(id);
+  }, [isGameOver]);
+
+  useEffect(() => {
+    if (isGameOver) return;
+    if (timeLeft !== 0) return;
+
+    handlePlay(currentSquares.slice());
+  }, [timeLeft, isGameOver]);
 
   const moves = history.map((squares, move) => {
     let description;
@@ -121,7 +158,12 @@ export default function Game() {
   return (
     <div className="game">
       <div className="game-board">
-        <Board xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay} />
+        <Board
+          xIsNext={xIsNext}
+          squares={currentSquares}
+          onPlay={handlePlay}
+          timeLeft={timeLeft}
+        />
       </div>
 
       <div className="game-info">
